@@ -1,0 +1,551 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0"><title>Yojana Kurukshetra Radar</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout concept: a Tableau-style worksheet. A sticky filter shelf drives four linked views:
+   issue strip, topic heatmap, term bars and a revision watchlist with video routes. */
+:root{
+  --bg:#eef1f5; --surface:#ffffff; --surface2:#f5f7fa; --ink:#121c26; --muted:#556575; --line:#d6dde6;
+  --yoj:#2b5c8f; --kur:#2f7a4b; --heat:#1f6f8b; --on-heat:#ffffff; --pick:#121c26;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e141b; --surface:#16202a; --surface2:#1b2733; --ink:#e7edf3; --muted:#9aabbb; --line:#2a3846;
+    --yoj:#6aa6dd; --kur:#6cc08a; --heat:#4fb3d1; --on-heat:#0b1218; --pick:#e7edf3; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e141b; --surface:#16202a; --surface2:#1b2733; --ink:#e7edf3; --muted:#9aabbb; --line:#2a3846;
+  --yoj:#6aa6dd; --kur:#6cc08a; --heat:#4fb3d1; --on-heat:#0b1218; --pick:#e7edf3; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 40px}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:30;background:var(--bg)}
+.wrap{max-width:1180px;margin:0 auto}
+h1,h2,h3{margin:0;font-weight:600;text-wrap:balance}
+h1{font-size:22px;letter-spacing:-.01em}
+h2{font-size:15px}
+h3{font-size:14px}
+p{margin:0}
+a{color:inherit}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--heat);outline-offset:2px}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+.cap{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:500}
+
+header.top{padding-block:20px 12px;display:flex;flex-wrap:wrap;gap:8px 24px;align-items:baseline;justify-content:space-between}
+header.top .sub{color:var(--muted);max-width:62ch}
+
+.shelf{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--bg);padding-block:10px;border-bottom:1px solid var(--line)}
+.shelf .row{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.grp{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:4px 12px;font-size:13px;line-height:1.3}
+.chip[aria-pressed="true"]{background:var(--pick);color:var(--bg);border-color:var(--pick)}
+.chip.y[aria-pressed="true"]{background:var(--yoj);border-color:var(--yoj);color:var(--bg)}
+.chip.k[aria-pressed="true"]{background:var(--kur);border-color:var(--kur);color:var(--bg)}
+.reset{margin-left:auto;border:0;background:none;text-decoration:underline;color:var(--muted);padding:4px}
+.status{font-size:12px;color:var(--muted);margin-top:6px}
+
+main{display:grid;gap:16px;padding-top:16px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px;min-width:0}
+.panel>header{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 16px;margin-bottom:12px}
+.panel>header p{color:var(--muted);font-size:13px;max-width:70ch}
+.scroll{overflow-x:auto}
+
+/* issue strip */
+.issues{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.icard{text-align:left;background:var(--surface2);border:1px solid var(--line);border-radius:6px;padding:10px 10px 10px 12px;border-left-width:4px;min-width:0}
+.icard.y{border-left-color:var(--yoj)} .icard.k{border-left-color:var(--kur)}
+.icard[aria-pressed="false"]{opacity:.45}
+.icard .m{font-weight:600;font-size:13px}
+.icard .t{font-size:13px;margin-top:2px;overflow-wrap:anywhere}
+.icard .s{font-size:11px;color:var(--muted);margin-top:4px}
+
+/* heatmap */
+table.heat{border-collapse:separate;border-spacing:3px;width:100%;min-width:640px}
+.heat th{font-weight:500;font-size:12px;color:var(--muted);text-align:center;padding:2px 4px;vertical-align:bottom}
+.heat th.rowh{text-align:left;white-space:nowrap;color:var(--ink);font-size:13px;padding-right:10px}
+.heat th.col button{border:0;background:none;color:inherit;font-size:12px;padding:2px 4px;border-radius:4px;line-height:1.25}
+.heat th.col button[aria-pressed="true"]{background:var(--pick);color:var(--bg)}
+.heat td{height:34px;text-align:center;border-radius:4px;font-size:13px;
+  background:color-mix(in srgb,var(--heat) calc(var(--v,0)*100%),var(--surface2))}
+.heat td.hi{color:var(--on-heat);font-weight:600}
+.heat tr.dim{opacity:.35}
+.heat td.sel{outline:2px solid var(--pick);outline-offset:-2px}
+.heat tfoot td{background:none;height:auto;font-size:12px;color:var(--muted)}
+
+/* term bars */
+.terms{display:grid;gap:4px}
+.trow{display:grid;grid-template-columns:150px minmax(0,1fr) 112px;gap:10px;align-items:center;padding:3px 0}
+.trow .nm{font-size:13px;overflow-wrap:anywhere}
+.trow .bar{height:14px;background:var(--surface2);border-radius:3px;position:relative}
+.trow .bar i{position:absolute;inset:0 auto 0 0;background:var(--heat);border-radius:3px;min-width:2px}
+.trow .bar b{position:absolute;left:calc(var(--w) + 6px);top:-1px;font-size:11px;font-weight:500;font-family:var(--mono)}
+.strip{display:grid;grid-template-columns:repeat(8,1fr);gap:2px}
+.strip span{height:14px;border-radius:2px;background:color-mix(in srgb,var(--heat) calc(var(--v,0)*100%),var(--surface2))}
+.strip span.off{opacity:.25}
+.legend8{display:grid;grid-template-columns:150px minmax(0,1fr) 112px;gap:10px;font-size:11px;color:var(--muted);margin-bottom:4px}
+.legend8 .strip span{height:auto;background:none;text-align:center;font-family:var(--mono);font-size:10px}
+
+/* watchlist */
+.wl{display:grid;gap:8px}
+.item{border:1px solid var(--line);border-radius:6px;background:var(--surface2);min-width:0}
+.item>summary{list-style:none;cursor:pointer;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:4px 12px;align-items:center;padding:10px 12px}
+.item>summary::-webkit-details-marker{display:none}
+.item>summary::after{content:"+";font-family:var(--mono);color:var(--muted)}
+.item[open]>summary::after{content:"\2212"}
+.pri{font-size:11px;font-weight:600;border-radius:4px;padding:2px 8px;border:1px solid var(--pick);white-space:nowrap}
+.pri.H{background:var(--pick);color:var(--bg)} .pri.M{background:none} .pri.L{border-color:var(--line);color:var(--muted)}
+.item .ti{font-weight:600;overflow-wrap:anywhere}
+.item .meta{grid-column:2/3;font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:2px 12px}
+.item .body{padding:4px 14px 14px;display:grid;gap:12px;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.item ul{margin:4px 0 0;padding-left:18px}
+.item li{margin:2px 0}
+.tag{display:inline-block;font-size:11px;font-family:var(--mono);border:1px solid var(--line);border-radius:4px;padding:0 6px;margin-right:4px;background:var(--surface)}
+.tag.y{border-color:var(--yoj);color:var(--yoj)} .tag.k{border-color:var(--kur);color:var(--kur)}
+.vids a{display:block;padding:5px 0;border-bottom:1px solid var(--line);text-decoration:none;overflow-wrap:anywhere}
+.vids a:hover{text-decoration:underline}
+.chs{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.chs a{border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:12px;text-decoration:none;background:var(--surface)}
+.chs a.fit{border-color:var(--heat);box-shadow:inset 0 0 0 1px var(--heat)}
+.chs a:hover{background:var(--surface2)}
+.note{font-size:12px;color:var(--muted);margin-top:6px}
+
+/* explorer */
+.search{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:6px;padding:6px 10px;font:inherit;width:min(100%,280px)}
+table.ex{border-collapse:collapse;width:100%;min-width:720px}
+.ex th{text-align:left;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500;padding:6px 8px;border-bottom:1px solid var(--line)}
+.ex td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+.ex td.i{white-space:nowrap}
+
+.method{font-size:13px;color:var(--muted);display:grid;gap:6px}
+.method b{color:var(--ink);font-weight:600}
+.empty{padding:18px;text-align:center;color:var(--muted)}
+
+@media (max-width:820px){
+  .issues{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .item .body{grid-template-columns:minmax(0,1fr)}
+  .trow,.legend8{grid-template-columns:104px minmax(0,1fr) 84px}
+}
+@media (prefers-reduced-motion:no-preference){ .icard,.chip{transition:opacity .15s,background .15s} }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Yojana Kurukshetra Radar</h1>
+      <p class="sub">July to October 2026, eight issues. Pick a magazine, month, GS paper or topic and every view below follows.</p>
+    </div>
+    <p class="muted mono" id="tally"></p>
+  </header>
+
+  <div class="shelf" role="region" aria-label="Filters">
+    <div class="row">
+      <div class="grp" id="fMag" role="group" aria-label="Magazine"></div>
+      <div class="grp" id="fMon" role="group" aria-label="Month"></div>
+      <div class="grp" id="fGs" role="group" aria-label="GS paper"></div>
+      <button class="reset" id="reset" type="button">Reset</button>
+    </div>
+    <div class="status" id="status" aria-live="polite"></div>
+  </div>
+
+  <main>
+    <section class="panel" aria-labelledby="h-issues">
+      <header><div><h2 id="h-issues">Issues and their cover themes</h2></div>
+      <p>Click an issue to switch it on or off. Faded issues are excluded from every view.</p></header>
+      <div class="issues" id="issues"></div>
+    </section>
+
+    <section class="panel" aria-labelledby="h-heat">
+      <header><div><h2 id="h-heat">Where each issue spends its articles</h2></div>
+      <p>Number of articles per topic bucket. Click a column heading to filter the watchlist and article list to that bucket.</p></header>
+      <div class="scroll"><table class="heat" id="heat"></table></div>
+    </section>
+
+    <section class="panel" aria-labelledby="h-terms">
+      <header><div><h2 id="h-terms">What the magazines keep repeating</h2></div>
+      <p>Mentions of each scheme, act or idea in the selected issues. The small strip shows all eight issues in order, so you can see when a theme peaked.</p></header>
+      <div id="terms"></div>
+    </section>
+
+    <section class="panel" aria-labelledby="h-wl">
+      <header><div><h2 id="h-wl">Revision watchlist</h2></div>
+      <p>Ranked by how often and how concretely the magazines push each topic. This ranks what to revise first. It is my judgement, not a forecast of the paper. Open an item for facts from the text and video routes.</p></header>
+      <div class="wl" id="wl"></div>
+    </section>
+
+    <section class="panel" aria-labelledby="h-ex">
+      <header><div><h2 id="h-ex">Article explorer</h2></div>
+      <input class="search" id="q" type="search" placeholder="Search titles and notes" aria-label="Search articles"></header>
+      <div class="scroll"><table class="ex" id="ex"></table></div>
+    </section>
+
+    <section class="panel" aria-labelledby="h-m">
+      <header><div><h2 id="h-m">How this was built, and what to trust</h2></div></header>
+      <div class="method">
+        <p><b>Source.</b> Eight PDFs from your D drive. Five had a text layer. Yojana July, Kurukshetra July and Kurukshetra September were page images, so I read them with OCR. OCR text can drop or garble words, so counts for those three issues run low.</p>
+        <p><b>Counts.</b> Keyword matches, so a scheme named differently is missed and a word used loosely is counted. Treat them as a guide to emphasis, not exact tallies.</p>
+        <p><b>Buckets, GS tags, priority.</b> Assigned by me from the article titles and text. They are judgement calls. Tell me where you disagree and I will change them.</p>
+        <p><b>Facts.</b> The facts in each watchlist item are what the magazine text says. The PDFs carry an upscpdf.com watermark and are not the official scans, so check key figures against PIB or the ministry before relying on them.</p>
+        <p><b>Videos.</b> The video links came from web searches on the topic. I have not watched them and could not confirm which channel posted most of them, so do not read them as endorsements by the channels you named. The channel buttons open a YouTube search for that channel plus the topic. Highlighted buttons are my guess at the best fit. I was not sure which channel "IGR" is, so that button searches the letters IGR with the topic.</p>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+(function(){
+"use strict";
+var ISS=[
+ {id:"YJ",mag:"Yojana",m:"Jul",theme:"Rooted in Heritage, Rising with Purpose",src:"OCR"},
+ {id:"YA",mag:"Yojana",m:"Aug",theme:"Empowered Citizens, Developed Nation",src:"Text layer"},
+ {id:"YS",mag:"Yojana",m:"Sep",theme:"Nourishing India: Nutrition, Health and a Sustainable Future",src:"Text layer"},
+ {id:"YO",mag:"Yojana",m:"Oct",theme:"Twenty-Five Years of Leadership",src:"Text layer"},
+ {id:"KJ",mag:"Kurukshetra",m:"Jul",theme:"Cultural Diversity in Rural India",src:"OCR"},
+ {id:"KA",mag:"Kurukshetra",m:"Aug",theme:"Save the Farm, Save the Future",src:"Text layer"},
+ {id:"KS",mag:"Kurukshetra",m:"Sep",theme:"Strategic Pillars for Viksit Bharat@2047",src:"OCR"},
+ {id:"KO",mag:"Kurukshetra",m:"Oct",theme:"Rural Circular Economy",src:"Text layer"}
+];
+var IDX={}; ISS.forEach(function(x,i){IDX[x.id]=i;});
+var BK=[
+ {id:"ECO",l:"Economy and trade"},{id:"AGR",l:"Agriculture and rural"},{id:"ENV",l:"Environment and climate"},
+ {id:"HLT",l:"Health and nutrition"},{id:"CUL",l:"Culture and heritage"},{id:"GOV",l:"Governance and Panchayat"},
+ {id:"SCI",l:"Science, energy, defence"},{id:"SKL",l:"Skills and livelihoods"}
+];
+var GSL={"1":"GS1","2":"GS2","3":"GS3","4":"GS4","E":"Essay"};
+function A(i,b,t,g,n){return {i:i,b:b,t:t,g:g.split(","),n:n||""};}
+var ART=[
+ A("YJ","CUL","Cultural heritage and India's civilisational renaissance","1,2","Vikas Bhi, Virasat Bhi; Panch Pran; Sengol in the new Parliament; Rajpath to Kartavya Path; manuscripts"),
+ A("YJ","ECO","Logistics and PM Gati Shakti","3","Multimodal planning, dual-use infrastructure, capacity building"),
+ A("YJ","AGR","Fertiliser import dependence and Soil Health Card","3","Title partly unreadable in OCR; covers DAP dependence and soil health"),
+ A("YJ","ENV","Urban ecology and nature-based solutions","3","Nature-based solutions in building rules and planning approvals"),
+ A("YJ","HLT","India's health landscape: progress, promise, path ahead","2","Mission Parivar Vikas, child nutrition"),
+ A("YJ","SCI","People's innovation and citizen-centric institutions","3","National Innovation Foundation, scouting grassroots innovation"),
+ A("YJ","SKL","Education and skills for a future-ready India","2","Union Budget, Concurrent List, workforce readiness"),
+ A("YJ","ENV","Water conservation and eco-governance","3","Water as the foundation of climate stability"),
+ A("YJ","GOV","Mission Veer Gatha: valour to values","2,4","Civic learning through stories of gallantry"),
+ A("YJ","HLT","Yoga: inner balance, outer radiance","","Low exam yield"),
+ A("YA","ECO","India's free trade agreements: from partnership to progress","2,3","13 active FTAs as of 2025; review of investment treaties"),
+ A("YA","SKL","DAY-NRLM: giving wings to soaring aspirations","2,3","Self-help group livelihoods"),
+ A("YA","SKL","PM-SETU: empowering youth, positioning India as skill capital","2","Skilling institutions"),
+ A("YA","HLT","Health technology assessment","2","Evidence for health spending decisions"),
+ A("YA","GOV","Digital India Corporation: citizen-centric welfare delivery","2","Digital public infrastructure for service delivery"),
+ A("YA","ECO","The startup and innovation revolution","3","Startup India, innovation ecosystem"),
+ A("YA","GOV","Beyond access: social security in the digital age","2","Social security delivery and gaps"),
+ A("YS","SKL","Maximising India's demographic dividend","1,2","Youth, health and skills as the base"),
+ A("YS","HLT","A life-course approach to malnutrition","2","Nutrition across life stages"),
+ A("YS","HLT","Combating hidden hunger","2","Micronutrient deficiency"),
+ A("YS","HLT","Gestational weight gain: evidence and action","2","Maternal nutrition"),
+ A("YS","HLT","Gut health, nutritional security and lifestyle diseases","2","Two articles on diet and non-communicable disease"),
+ A("YS","GOV","Transforming rural sanitation","2","Swachh Bharat, rural sanitation"),
+ A("YS","HLT","Rabies: a preventable disease","2,3","Most-mentioned term in the issue"),
+ A("YS","ENV","Plant-based living","3","Diet and sustainability"),
+ A("YS","GOV","Outcome-based budgeting in health","2","Budget design for health outcomes"),
+ A("YS","AGR","Biofloc technology: a new green revolution in aquaculture","3","Aquaculture technology"),
+ A("YO","GOV","Twenty-five years of leadership: progress, prosperity, people-first governance","2","Gujarat and national governance record"),
+ A("YO","ECO","From Vibrant Gujarat to Viksit Bharat","3","Investment summit model"),
+ A("YO","GOV","Reflections from 25 years of public service","2","Administrative experience"),
+ A("YO","GOV","Enhancing the civil services' performance","2,E","Directly relevant to the aspirant's own service"),
+ A("YO","SCI","India's nuclear churning for Viksit Bharat","3","SHANTI Act, 100 GW nuclear by 2047, Atomic Energy Act 1948, 1974 Pokhran"),
+ A("YO","HLT","Ayushman Bharat: reimagining health","2","Health coverage and delivery"),
+ A("YO","ENV","India's green transformation","3","Green transition"),
+ A("KJ","CUL","Cultural diversity as a tool for national integration","1","Fairs and festivals as social cohesion: Pushkar, Sonepur, Kumbh, folk forms"),
+ A("KJ","CUL","Rural craft, global pride","1,3","Self-help groups, DAY-NRLM, handloom and crafts"),
+ A("KJ","CUL","Tribal knowledge traditions and nature","1,3","Tribal communities as custodians, farmers' diversity exchange"),
+ A("KJ","CUL","Rural festivals as cultural bridges","1","Kutch, Tarnetar, Bateshwar and other fairs"),
+ A("KJ","ECO","Rural cultural tourism","1,3","Community-led model; Khonoma village in Nagaland"),
+ A("KJ","SKL","Rural women as custodians of cultural diversity","1,2","Kudumbashree, self-help groups"),
+ A("KJ","CUL","Languages, dialects and oral traditions","1","Linguistic diversity of rural India; Census data"),
+ A("KJ","CUL","Culinary threads: tribal food, millets, fermented foods","1","Traditional food systems"),
+ A("KJ","CUL","Gyan Bharatam: preserving India's manuscript heritage","1","Mission objectives, digital tools"),
+ A("KJ","GOV","Bastar Pandum and a Naxal-free trajectory","3","Internal security and development in Bastar"),
+ A("KJ","CUL","Tribal art traditions","1","Bhil painting, Rabha and Tamang masks"),
+ A("KA","AGR","Save the farm, save the future","3","Issue lead article"),
+ A("KA","AGR","Protecting farmers, securing the future","3","Risk cover and income support"),
+ A("KA","HLT","Food security to nutrition security","2,3","Shift in the policy goal"),
+ A("KA","ENV","Towards climate-resilient agriculture","3","Climate is the most-used term in the issue"),
+ A("KA","CUL","Agricultural heritage: from timeless legacy to Viksit Bharat","1,3","Traditional farming knowledge"),
+ A("KA","AGR","Fortifying agriculture through structural innovation","3","Structural change in farming"),
+ A("KA","AGR","Women redefining sustainable agriculture","1,3","Women in farming"),
+ A("KA","AGR","Towards securing the future of farming","3","Soil health and natural resources"),
+ A("KA","ENV","Growing responsibly","3","Sustainable agriculture practice"),
+ A("KA","SKL","From job seekers to job creators: the ASPIRE story","3","Rural enterprise scheme"),
+ A("KA","ENV","'Catch the Rain' campaign: building a water-secure Bharat","3","Jal Shakti Abhiyan"),
+ A("KS","GOV","Strategic pillars for realising Viksit Bharat@2047","2,E","Economic competitiveness, national security, global partnerships, legal foundations"),
+ A("KS","SKL","Building capabilities, creating opportunities","2","Education, skill and opportunity"),
+ A("KS","HLT","Health system and Ayushman Arogya Mandirs","2","Primary care network"),
+ A("KS","ENV","Green growth with sustainability","3","Growth with climate goals"),
+ A("KS","HLT","Anaemia Mukt Bharat and PM Surakshit Matritva Abhiyan","2","Maternal and child health programmes"),
+ A("KS","HLT","Health as human capital","2","Economic case for health"),
+ A("KS","SCI","Innovation transforming rural India","3","Rural technology and startups"),
+ A("KS","ECO","Rural enterprise: PMFME, Amul model, DAY-NRLM, PM Vishwakarma","3","Micro food processing, cooperatives, artisans"),
+ A("KS","AGR","Cooperatives for shared prosperity","3","Farmers' collective power, digital agriculture"),
+ A("KS","ENV","Climate-ready rural infrastructure","3","Modhera solar village example, water resources"),
+ A("KS","GOV","A year of impact at the grassroots","2","Panchayat performance"),
+ A("KS","GOV","Panch Pranali: a new approach to active learning","2","Training of panchayat functionaries"),
+ A("KS","SCI","Renewable energy and rural transformation","3","PM-KUSUM components, large solar projects"),
+ A("KS","GOV","Reimagining rural employment: the VB-G RAM G Act","2,3","Replaces MGNREGA; 125 days; in force 1 July 2026"),
+ A("KO","ENV","Rural prosperity through circular economy","3","Issue lead article"),
+ A("KO","AGR","Circular agriculture and sustainable development","3","Farm waste as input"),
+ A("KO","ECO","Waste to wealth: financing rural transformation","3","Finance for waste enterprises"),
+ A("KO","ECO","Startups creating value from waste","3","Waste-based enterprises"),
+ A("KO","ENV","Circular water economy for smart villages","3","Reuse and recharge"),
+ A("KO","ENV","Solid Waste Management Rules 2026","3","Segregation at source and resource recovery"),
+ A("KO","GOV","Pathways to sustainability through PRIs","2","Panchayat role in waste and sanitation"),
+ A("KO","ECO","Closing the loop, localising value chains","3","Local circular value chains"),
+ A("KO","SCI","GOBARdhan: waste to clean energy","3","Biogas and compressed biogas"),
+ A("KO","GOV","Swachhata: a people's movement","2","Swachh Bharat"),
+ A("KO","HLT","Nutrition: a collective effort for a healthier India","2","Poshan is mentioned about 21 times in this issue")
+];
+/* counts in order YJ,YA,YS,YO,KJ,KA,KS,KO */
+var TERMS=[
+ ["Viksit Bharat",[15,14,10,24,7,11,81,6]],
+ ["Climate",[35,4,2,14,19,90,48,10]],
+ ["Self-help groups",[0,27,0,0,15,12,57,29]],
+ ["Panchayat",[0,1,8,0,4,2,63,49]],
+ ["Startups",[1,39,0,0,0,8,22,16]],
+ ["Cooperatives",[2,14,0,2,4,6,17,24]],
+ ["Renewable",[4,2,0,12,0,3,42,15]],
+ ["Solar",[3,0,2,8,0,2,47,4]],
+ ["Circular economy",[0,0,0,2,0,0,2,57]],
+ ["GOBARdhan",[0,0,1,0,0,0,1,29]],
+ ["Nuclear",[0,0,0,59,0,0,1,0]],
+ ["Rabies",[0,0,85,0,0,0,0,0]],
+ ["Biofloc",[0,0,38,0,0,3,1,0]],
+ ["Millets",[0,0,8,0,8,31,1,2]],
+ ["MGNREGA / G-RAM-G",[0,0,1,0,0,0,37,5]],
+ ["Ayushman",[3,0,9,14,0,0,13,0]],
+ ["Poshan",[0,1,5,0,0,4,1,21]],
+ ["DAY-NRLM",[0,14,0,0,4,2,8,2]],
+ ["Digital India",[0,13,0,1,3,1,0,0]],
+ ["Digital public infrastructure",[2,10,0,0,2,7,2,0]],
+ ["Free trade",[0,9,0,0,0,0,1,0]],
+ ["PM Gati Shakti",[7,0,0,0,0,0,1,0]],
+ ["Soil Health",[3,0,0,0,0,11,3,0]],
+ ["Gyan Bharatam",[1,0,0,0,13,0,0,0]],
+ ["Swachh Bharat",[0,0,7,3,0,0,0,11]],
+ ["Jal Shakti",[0,0,1,2,0,2,0,13]],
+ ["PM-SETU / Skill India",[0,12,0,0,0,0,0,0]],
+ ["NITI Aayog",[0,11,2,1,0,2,4,1]]
+];
+var CH=[
+ {n:"Palki Sharma",q:"Palki Sharma Gravitas",k:"T"},
+ {n:"The Better India",q:"The Better India",k:"R"},
+ {n:"Chanakya Dialogues",q:"Chanakya Dialogues",k:"D"},
+ {n:"IGR",q:"IGR",k:"D"},
+ {n:"Sansad TV (RSTV)",q:"Sansad TV Rajya Sabha TV",k:"P"},
+ {n:"DD India",q:"DD India",k:"P"}
+];
+/* k: T trade/world economy, R rural grassroots stories, D defence/security/strategy, P policy debate and scheme explainers */
+function V(id,t){return {id:id,t:t};}
+var WL=[
+ {t:"VB-G RAM G Act replaces MGNREGA",p:"H",ty:"Prelims fact and Mains",gs:["2","3"],b:["GOV"],iss:["KS","KO","YS"],
+  why:"Kurukshetra September gives it a full article and about 37 mentions of the old and new names.",
+  facts:["Came into force on 1 July 2026 (Kurukshetra Sep).","Statutory wage employment rises from 100 to 125 days.","Links work to durable rural assets; focus on water-related works and extreme-weather measures.","Wages are paid weekly.","Compare with MGNREGA on guarantee days, assets, wage timing and monitoring."],
+  q:"VB-G RAM G MGNREGA",fit:["P","R"],
+  v:[V("lxbOgaFiVFw","VB G RAM G Scheme Explained"),V("exuLXCTybHk","5 Key Changes in MGNREGA Act to VB-G RAM G"),V("wL6AxH9cvC0","VB-GRAM G replaces MGNREGA from July 1")]},
+ {t:"SHANTI Act and nuclear power by 2047",p:"H",ty:"Prelims fact and Mains",gs:["3"],b:["SCI"],iss:["YO"],
+  why:"Nuclear is mentioned about 59 times in Yojana October, far more than any other topic in that issue.",
+  facts:["Full name: Sustainable Harnessing and Advancement of Nuclear Energy for Transforming India.","Passed by both Houses and enacted on the President's assent (Yojana Oct).","Target of 100 GW nuclear by 2047 under the Nuclear Energy Mission for Viksit Bharat.","Background: Atomic Energy Act 1948; Department of Atomic Energy and Atomic Energy Commission; 1974 Pokhran explosion.","Mains angle: energy security together with decarbonisation."],
+  q:"SHANTI Act nuclear energy India",fit:["D","P"],
+  v:[V("A74f-amtn20","What Is The SHANTI Bill? Nuclear Liability, SMRs and Foreign Funding Explained"),V("uZS3zp6dFRs","SHANTI Bill 2025 Explained"),V("hxoWf72eDR0","Why did India table a new nuclear energy bill and what is the opposition to it?")]},
+ {t:"Solid Waste Management Rules 2026",p:"H",ty:"Prelims fact and Mains",gs:["3"],b:["ENV"],iss:["KO"],
+  why:"The whole October Kurukshetra issue is built around waste and the circular economy, with a dedicated article on the Rules.",
+  facts:["Emphasis on segregation at source and resource recovery (Kurukshetra Oct).","The magazine text I read gives only those two features. Check the rule text on the MoEFCC site for definitions and duties.","Village angle: waste management as local economic activity, not just sanitation."],
+  q:"Solid Waste Management Rules 2026",fit:["P","R"],
+  v:[V("mmIAXNO7ayQ","Solid Waste Management Rules 2026 Explained"),V("1_BA2LoDE4A","Solid Waste Management Rules 2026: Digital Tracking, Polluter Pays Principle and Circular Economy Push"),V("dgLt1xcmTOc","India's Waste Crisis and SWM Rules 2026")]},
+ {t:"Rural circular economy and GOBARdhan",p:"H",ty:"Mains and Prelims fact",gs:["3","2"],b:["ENV","SCI","ECO"],iss:["KO","YS"],
+  why:"Circular economy has 57 mentions in Kurukshetra October and GOBARdhan 29.",
+  facts:["GOBARdhan is presented as the route from waste to clean energy.","Panchayati Raj Institutions are named as the delivery layer.","Startups and finance for waste enterprises are covered in separate articles.","Water is treated as a circular system too (circular water economy for smart villages)."],
+  q:"rural circular economy GOBARdhan waste to wealth",fit:["R","P"],
+  v:[V("pvPI6PK8k7o","Waste Experts on solving India's Garbage Problem"),V("i0IndUSPhtI","How a Rajasthan Village Became 100% Zero Waste? (Short)"),V("gaFpO34uxKU","A story of Zero waste Aandhi Village, Part 1")]},
+ {t:"Viksit Bharat@2047: pillars and 25-year governance record",p:"H",ty:"Essay and Mains",gs:["2","E"],b:["GOV"],iss:["KS","YO","YJ","YA","KA"],
+  why:"The phrase appears in all eight issues and 81 times in Kurukshetra September alone.",
+  facts:["Four strategic pillars (Kurukshetra Sep): economic competitiveness, strong national security, secure global partnerships and alliances, robust legal foundations.","Yojana October frames the theme as 25 years of leadership, from Vibrant Gujarat to Viksit Bharat.","Yojana October also has an article on enhancing civil services' performance."],
+  q:"Viksit Bharat 2047 pillars",fit:["P","D"],
+  v:[]},
+ {t:"Nutrition, anaemia and health delivery",p:"H",ty:"Mains and Prelims fact",gs:["2"],b:["HLT"],iss:["YS","KS","KO","YO","YA"],
+  why:"A whole Yojana issue (September) plus health articles in five other issues.",
+  facts:["Yojana editorial notes National Nutrition Week in the first week of September and the month-long Rashtriya Poshan Maah.","Hidden hunger means micronutrient deficiency, covered in a separate article.","Kurukshetra September covers Anaemia Mukt Bharat, PM Surakshit Matritva Abhiyan and Ayushman Arogya Mandirs.","Yojana August covers health technology assessment; Yojana September covers outcome-based health budgeting."],
+  q:"India malnutrition hidden hunger Poshan",fit:["P","R"],
+  v:[V("L0xHt0SCdyw","Is India Starving for Nutrition? The Protein Crisis in a Calorie-Sufficient Nation"),V("EhTJ27PL1io","How Is India Waging A War Against Malnutrition"),V("OxTpF5o7XbE","India's Battle With Malnutrition And Obesity, Should We Be Worried?")]},
+ {t:"Climate-resilient farming, millets and water",p:"H",ty:"Mains and Prelims fact",gs:["3"],b:["AGR","ENV"],iss:["KA","YJ","KS"],
+  why:"Climate is mentioned 90 times in Kurukshetra August, the highest count of any tracked term.",
+  facts:["Millets: 31 mentions in Kurukshetra August; also in Yojana September and Kurukshetra July.","Soil Health Card appears in Kurukshetra August and Yojana July.","Jal Shakti Abhiyan: Catch the Rain has its own article in Kurukshetra August.","Fertiliser import dependence (DAP) is raised in Yojana July."],
+  q:"climate resilient agriculture millets water conservation",fit:["R","P"],
+  v:[V("6HKf3VQ_nA8","Jal Shakti Abhiyan: Catch the Rain, making water conservation a Jan Andolan"),V("V6Sd0m4t1M4","Jal Shakti Abhiyan 2026: Catch the Rain"),V("Kh1s2I2g1B8","PM Modi launches Jal Shakti Abhiyan: Catch the Rain")]},
+ {t:"Self-help groups, DAY-NRLM, startups and cooperatives",p:"H",ty:"Mains",gs:["2","3"],b:["SKL","ECO"],iss:["YA","KS","KO","KJ","KA"],
+  why:"Self-help groups are named in five issues and startups in five, which makes this the most repeated livelihood idea.",
+  facts:["Yojana August: DAY-NRLM article; startups mentioned about 39 times.","Kurukshetra September: PMFME, PM Vishwakarma, Amul cooperative model, SVEP.","Kurukshetra July: self-help groups as the backbone of craft survival.","Kurukshetra August: the ASPIRE scheme for rural job creators."],
+  q:"self help groups DAY-NRLM Lakhpati rural livelihood",fit:["R","P"],
+  v:[]},
+ {t:"Heritage policy: Gyan Bharatam, Virasat and cultural diversity",p:"M",ty:"Prelims fact and GS1",gs:["1"],b:["CUL"],iss:["YJ","KJ"],
+  why:"Two issues on culture, and Gyan Bharatam alone is named 13 times in Kurukshetra July.",
+  facts:["Vikas Bhi, Virasat Bhi is presented as the guiding approach (Yojana Jul).","Sengol installed in the new Parliament; Rajpath renamed Kartavya Path; PMO and Central Vista precinct called Seva Teertha.","Gyan Bharatam: Ministry of Culture mission on manuscript heritage with digital tools.","Art forms named: Baul, Dhokra, Warli, Madhubani, Phulkari, Bhil painting, Pandavani, Villu Paatu, Dadhi Jatha, Chhau."],
+  q:"Gyan Bharatam Mission manuscripts heritage",fit:["P","D"],
+  v:[V("RCcxOmlGIs0","Gyan Bharatam Portal: Preserving and Digitising India's Rich Manuscript Heritage"),V("8WXHKc-rGEs","Gyan Bharatam Mission Digitizes Ancient Manuscripts"),V("yIuN2QDPf3o","Gyan Bharatam Mission Launched")]},
+ {t:"Free trade agreements and economic diplomacy",p:"M",ty:"Mains and Prelims fact",gs:["2","3"],b:["ECO"],iss:["YA"],
+  why:"An article by Harsh Vardhan Shringla in Yojana August. One issue only, so lower recurrence.",
+  facts:["13 active free trade agreements as of 2025 (Yojana Aug).","The government is reviewing investment treaties and preferential trade arrangements.","Newer deals are not listed in the article text I read; confirm the current list from the Commerce Ministry."],
+  q:"India free trade agreements",fit:["T","D"],
+  v:[V("Qdy2po_WEuY","India-EU Set to Strike Mother of All Trade Deals"),V("Cb3pgjCcIZE","India and the UK Agree on Historic Free Trade Deal"),V("VvdVrH9tcIA","India-New Zealand Trade Deal: A $20 Billion Boost and Zero-Duty Access")]},
+ {t:"Rural renewable energy",p:"M",ty:"Mains and Prelims fact",gs:["3"],b:["SCI","ENV"],iss:["KS","YO"],
+  why:"Kurukshetra September mentions solar 47 times and renewable 42 times, with a dedicated article.",
+  facts:["PM-KUSUM components are covered, including individual-pump and feeder-level work.","Modhera village in Gujarat is cited as a solar-village example.","Yojana October links India's green transformation to nuclear and renewables."],
+  q:"PM-KUSUM solar rural India",fit:["P","R"],
+  v:[]},
+ {t:"Panchayati Raj capacity and role",p:"M",ty:"Mains",gs:["2"],b:["GOV"],iss:["KS","KO"],
+  why:"Panchayat is named 63 times in Kurukshetra September and 49 times in October.",
+  facts:["Kurukshetra September: a year of impact at the grassroots; Panch Pranali as a training approach.","Kurukshetra October: PRIs as the delivery layer for waste and sanitation."],
+  q:"Panchayati Raj panchayat governance India",fit:["P"],
+  v:[]},
+ {t:"Skilling, digital delivery and social security",p:"M",ty:"Mains",gs:["2"],b:["SKL","GOV"],iss:["YA","YJ"],
+  why:"Yojana August carries PM-SETU, Digital India Corporation and a social security article together.",
+  facts:["PM-SETU is presented as a skilling push for youth.","Digital public infrastructure is named about 10 times in Yojana August.","Yojana July links education and skills to the Union Budget and the Concurrent List."],
+  q:"PM-SETU skilling digital public infrastructure",fit:["P","T"],
+  v:[]},
+ {t:"Rabies and biofloc aquaculture",p:"L",ty:"Prelims-style trivia",gs:["3"],b:["HLT","AGR"],iss:["YS"],
+  why:"Very frequent in one issue (rabies about 85 mentions, biofloc about 38) but narrow topics. Low chance each, so read once rather than revise.",
+  facts:["Yojana September has a full article on rabies as a preventable disease.","Biofloc technology is presented as a new green revolution in sustainable aquaculture."],
+  q:"rabies prevention India biofloc aquaculture",fit:["P","R"],
+  v:[]}
+];
+
+var S={mag:"all",mon:{Jul:1,Aug:1,Sep:1,Oct:1},gs:"all",bk:null,q:""};
+var $=function(id){return document.getElementById(id);};
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];});}
+function selIssues(){return ISS.filter(function(x){return (S.mag==="all"||x.mag===S.mag)&&S.mon[x.m];});}
+function selSet(){var o={};selIssues().forEach(function(x){o[x.id]=1;});return o;}
+function cls(x){return x.mag==="Yojana"?"y":"k";}
+function gsOk(list){return S.gs==="all"||list.indexOf(S.gs)>-1;}
+
+function chip(label,pressed,cl,fn){
+  var b=document.createElement("button");b.type="button";b.className="chip "+(cl||"");b.textContent=label;
+  b.setAttribute("aria-pressed",pressed?"true":"false");b.addEventListener("click",fn);return b;
+}
+function renderShelf(){
+  var m=$("fMag");m.innerHTML="";
+  [["all","Both magazines",""],["Yojana","Yojana","y"],["Kurukshetra","Kurukshetra","k"]].forEach(function(r){
+    m.appendChild(chip(r[1],S.mag===r[0],r[2],function(){S.mag=r[0];render();}));});
+  var n=$("fMon");n.innerHTML="";
+  ["Jul","Aug","Sep","Oct"].forEach(function(mo){
+    n.appendChild(chip(mo,!!S.mon[mo],"",function(){
+      var on=Object.keys(S.mon).filter(function(k){return S.mon[k];});
+      if(S.mon[mo]&&on.length===1)return;
+      S.mon[mo]=S.mon[mo]?0:1;render();}));});
+  var g=$("fGs");g.innerHTML="";
+  [["all","All papers"],["1","GS1"],["2","GS2"],["3","GS3"],["4","GS4"],["E","Essay"]].forEach(function(r){
+    g.appendChild(chip(r[1],S.gs===r[0],"",function(){S.gs=r[0];render();}));});
+}
+function renderIssues(){
+  var box=$("issues");box.innerHTML="";var sel=selSet();
+  ISS.forEach(function(x){
+    var b=document.createElement("button");b.type="button";b.className="icard "+cls(x);
+    b.setAttribute("aria-pressed",sel[x.id]?"true":"false");
+    b.innerHTML='<div class="m">'+x.mag+" · "+x.m+' 2026</div><div class="t">'+esc(x.theme)+'</div><div class="s">Read from: '+x.src+"</div>";
+    b.addEventListener("click",function(){
+      // clicking an issue isolates it; clicking the only selected issue restores all
+      var only=selIssues().length===1&&sel[x.id];
+      if(only){S.mag="all";S.mon={Jul:1,Aug:1,Sep:1,Oct:1};}
+      else{S.mag=x.mag;S.mon={Jul:0,Aug:0,Sep:0,Oct:0};S.mon[x.m]=1;}
+      render();});
+    box.appendChild(b);});
+}
+function filteredArts(){
+  var sel=selSet(),q=S.q.trim().toLowerCase();
+  return ART.filter(function(a){
+    if(!sel[a.i])return false;
+    if(S.bk&&a.b!==S.bk)return false;
+    if(S.gs!=="all"&&a.g.indexOf(S.gs)<0)return false;
+    if(q&&(a.t+" "+a.n).toLowerCase().indexOf(q)<0)return false;
+    return true;});
+}
+function renderHeat(){
+  var sel=selSet(),t=$("heat");
+  var counts={};ART.forEach(function(a){
+    if(S.gs!=="all"&&a.g.indexOf(S.gs)<0)return;
+    var k=a.i+"|"+a.b;counts[k]=(counts[k]||0)+1;});
+  var max=1;Object.keys(counts).forEach(function(k){if(counts[k]>max)max=counts[k];});
+  var h="<thead><tr><th></th>";
+  BK.forEach(function(b){h+='<th class="col"><button type="button" data-bk="'+b.id+'" aria-pressed="'+(S.bk===b.id)+'">'+b.l+"</button></th>";});
+  h+="</tr></thead><tbody>";
+  ISS.forEach(function(x){
+    h+='<tr class="'+(sel[x.id]?"":"dim")+'"><th class="rowh" scope="row">'+x.mag.slice(0,3)+" "+x.m+"</th>";
+    BK.forEach(function(b){
+      var c=counts[x.id+"|"+b.id]||0,v=c/max;
+      h+='<td class="'+(v>.55?"hi ":"")+(S.bk===b.id?"sel":"")+'" style="--v:'+v.toFixed(2)+'" title="'+x.mag+" "+x.m+", "+b.l+": "+c+' articles">'+(c||"")+"</td>";});
+    h+="</tr>";});
+  h+="</tbody><tfoot><tr><td></td>";
+  BK.forEach(function(b){var s=0;ART.forEach(function(a){if(sel[a.i]&&a.b===b.id&&(S.gs==="all"||a.g.indexOf(S.gs)>-1))s++;});h+="<td>"+s+" in view</td>";});
+  h+="</tr></tfoot>";
+  t.innerHTML=h;
+  t.querySelectorAll("button[data-bk]").forEach(function(b){b.addEventListener("click",function(){
+    S.bk=S.bk===b.getAttribute("data-bk")?null:b.getAttribute("data-bk");render();});});
+}
+function renderTerms(){
+  var sel=selSet(),box=$("terms");
+  var rows=TERMS.map(function(r){var s=0;ISS.forEach(function(x,i){if(sel[x.id])s+=r[1][i];});return {n:r[0],c:r[1],s:s};})
+    .filter(function(r){return r.s>0;}).sort(function(a,b){return b.s-a.s;}).slice(0,16);
+  if(!rows.length){box.innerHTML='<p class="empty">No tracked terms in the selected issues.</p>';return;}
+  var max=rows[0].s,rowMax=1;TERMS.forEach(function(r){r[1].forEach(function(v){if(v>rowMax)rowMax=v;});});
+  var h='<div class="legend8"><span></span><span></span><div class="strip">';
+  ISS.forEach(function(x){h+="<span>"+x.mag[0]+x.m[0]+"</span>";});
+  h+='</div></div><div class="terms">';
+  rows.forEach(function(r){
+    var w=Math.max(2,Math.round(r.s/max*80));
+    h+='<div class="trow"><span class="nm">'+esc(r.n)+'</span><span class="bar" style="--w:'+w+'%"><i style="width:'+w+'%"></i><b>'+r.s+'</b></span><div class="strip" aria-label="Mentions by issue">';
+    r.c.forEach(function(v,i){
+      var rm=0;r.c.forEach(function(z){if(z>rm)rm=z;});
+      h+='<span class="'+(sel[ISS[i].id]?"":"off")+'" style="--v:'+(rm?(v/rm).toFixed(2):0)+'" title="'+ISS[i].mag+" "+ISS[i].m+": "+v+'"></span>';});
+    h+="</div></div>";});
+  h+="</div>";
+  box.innerHTML=h;
+}
+function ytSearch(c,item){return "https://www.youtube.com/results?search_query="+encodeURIComponent(c.q+" "+item.q);}
+function renderWatch(){
+  var sel=selSet(),box=$("wl");box.innerHTML="";
+  var order={H:0,M:1,L:2};
+  var list=WL.filter(function(w){
+    if(!w.iss.some(function(i){return sel[i];}))return false;
+    if(!gsOk(w.gs))return false;
+    if(S.bk&&w.b.indexOf(S.bk)<0)return false;
+    return true;}).sort(function(a,b){return order[a.p]-order[b.p];});
+  if(!list.length){box.innerHTML='<p class="empty">Nothing matches this combination. Try Reset.</p>';return;}
+  list.forEach(function(w){
+    var d=document.createElement("details");d.className="item";
+    var tags=w.iss.map(function(i){var x=ISS[IDX[i]];return '<span class="tag '+cls(x)+'">'+x.mag[0]+x.m+"</span>";}).join("");
+    var gs=w.gs.map(function(g){return GSL[g];}).join(" · ");
+    var pl={H:"Revise first",M:"Revise next",L:"Read once"}[w.p];
+    var vids=w.v.length?w.v.map(function(v){return '<a href="https://www.youtube.com/watch?v='+v.id+'" target="_blank" rel="noopener">'+esc(v.t)+"</a>";}).join(""):'<p class="note">No topic-matched video found in my searches. Use the channel buttons.</p>';
+    var chs=CH.map(function(c){return '<a class="'+(w.fit.indexOf(c.k)>-1?"fit":"")+'" href="'+ytSearch(c,w)+'" target="_blank" rel="noopener">'+esc(c.n)+"</a>";}).join("");
+    d.innerHTML='<summary><span class="pri '+w.p+'">'+pl+'</span><span class="ti">'+esc(w.t)+'</span></summary>'+
+      '<div class="meta" style="padding:0 12px 8px;font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 12px"><span>'+esc(w.ty)+"</span><span>"+gs+"</span><span>"+tags+"</span></div>"+
+      '<div class="body"><div><div class="cap">Why it ranks here</div><p>'+esc(w.why)+'</p><div class="cap" style="margin-top:10px">From the magazine text</div><ul>'+w.facts.map(function(f){return "<li>"+esc(f)+"</li>";}).join("")+"</ul></div>"+
+      '<div class="vids"><div class="cap">Videos on this topic (not watched by me)</div>'+vids+'<div class="cap" style="margin-top:10px">Search a channel</div><div class="chs">'+chs+'</div><p class="note">Outlined buttons are my guess at the best fit. Each opens a YouTube search.</p></div></div>';
+    box.appendChild(d);});
+}
+function renderExplorer(){
+  var rows=filteredArts(),t=$("ex");
+  if(!rows.length){t.innerHTML='<tbody><tr><td class="empty">No articles match.</td></tr></tbody>';return;}
+  var h="<thead><tr><th>Issue</th><th>Article</th><th>Bucket</th><th>Paper</th><th>Note</th></tr></thead><tbody>";
+  var bl={};BK.forEach(function(b){bl[b.id]=b.l;});
+  rows.forEach(function(a){var x=ISS[IDX[a.i]];
+    h+='<tr><td class="i"><span class="tag '+cls(x)+'">'+x.mag[0]+x.m+"</span></td><td>"+esc(a.t)+"</td><td>"+bl[a.b]+"</td><td class=\"mono\">"+(a.g.filter(Boolean).map(function(g){return GSL[g];}).join(" ")||"-")+"</td><td class=\"muted\">"+esc(a.n)+"</td></tr>";});
+  t.innerHTML=h+"</tbody>";
+}
+function renderStatus(){
+  var si=selIssues(),arts=filteredArts();
+  $("status").textContent=si.length+" of 8 issues · "+arts.length+" articles shown"+(S.bk?" · bucket: "+BK.filter(function(b){return b.id===S.bk;})[0].l:"")+(S.gs!=="all"?" · "+GSL[S.gs]:"");
+  $("tally").textContent="8 issues · "+ART.length+" articles · "+TERMS.length+" tracked terms";
+}
+function render(){renderShelf();renderIssues();renderHeat();renderTerms();renderWatch();renderExplorer();renderStatus();}
+$("reset").addEventListener("click",function(){S={mag:"all",mon:{Jul:1,Aug:1,Sep:1,Oct:1},gs:"all",bk:null,q:""};$("q").value="";render();});
+$("q").addEventListener("input",function(e){S.q=e.target.value;renderExplorer();renderStatus();});
+render();
+})();
+</script>
+</body></html>
